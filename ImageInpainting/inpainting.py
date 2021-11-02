@@ -1,136 +1,136 @@
 # from .lns import patch_reordering
 from .pra import patch_reordering
-
-from PIL import Image
-
-from numpy import asarray, array
+from .images import read_image_as_arrays, save_arrays_as_image
+from numpy import array, full, where, mean, arange
 from numpy import random as rd
-from numpy import fft
-
 from scipy import interpolate
 
+CORRUPTED_PIXEL = -999
 
-def read_image(location: str):
+def mean_of_squared_differences(patch1: array, patch2: array):
     '''
-    Return the numpy array version
-    of the image located at <location>
-    on the disk
+    Distance measure between patch1 and patch2 
+    to be the average of squared differences 
+    between existing pixels that share the same
+    location in both patches.
     '''
+    squared_differences = (patch1 - patch2)**2
+    sub_squared_differences = squared_differences[(patch1 != CORRUPTED_PIXEL) & (patch2 != CORRUPTED_PIXEL)]
 
-    img = Image.open(location).convert('RGB')
-    R, G, B = (asarray(ch, dtype=int) for ch in img.split())
+    if sub_squared_differences.size == 0:
+        return -1
 
-    return R, G, B
+    return mean(sub_squared_differences)
 
-def save_image(R: array, G: array, B: array, location: str):
+def cubic_spline(signal: array, mask: array):
     '''
-    Save a numpy array as an image at 
-    <location> on the disk
+    Interpolation of signal using a mask to
+    define indices to fill. Using cubic spline
+    interpolation.
     '''
+    x = arange(signal.size)
+    masked_x = x[mask]
 
-    img = Image.merge('RGB', tuple(Image.fromarray(ch.astype(dtype='uint8')).convert('L') for ch in [R, G, B]))
-    img.save(location)
+    if masked_x.size == x.size:
+        return signal
 
-def corrupt_image(load_location: str, save_location: str, prob=4/5):
+    masked_signal = signal[mask]
+    bspline = interpolate.splrep(masked_x, masked_signal)
+    return interpolate.splev(x, bspline)
+
+class CorruptedImage:
     '''
-    Take the image at <load_location> on disk
-    and insert corrupt pixels randomly with
-    probability <prob> and save the result
-    at <save_location> on disk
+    Class for model images with missing data
+    defined by a mask. Provides a function to
+    do a patches-based inpainting
     '''
+    def __init__(self, location: str, mask_location=None, rgb=False, corrupt_prob=4/5):
+        channels = read_image_as_arrays(location, rgb=rgb)
+        self.shape = channels[0].shape
+        self.rgb = rgb
 
-    R, G, B = read_image(load_location)
-    
-    for rrow, grow, brow in zip(R, G, B):
-        for i, _ in enumerate(rrow):
-            if rd.choice([True, False], p=[prob, 1 - prob]):
-                rrow[i] = grow[i] = brow[i] = 0
-    
-    save_image(R, G, B, save_location)
+        self.mask = read_image_as_arrays(mask_location, dtype=bool)[0] if isinstance(mask_location, str) else +\
+                        rd.choice(a=[False, True], size=self.shape, p=[corrupt_prob, 1 - corrupt_prob])
 
-def distance_measure(patch1: array, patch2: array):
-    ssum, scnt = 0, 0
+        if self.shape != self.mask.shape:
+            raise ValueError(f'Images at <{location}> and <{mask_location}> must have same resolution')
 
-    for val1, val2 in zip(patch1, patch2):
-        if val1 >= 0 and val2 >= 0:
-            diff = val1 - val2
-            ssum += diff * diff
-            scnt += 1
+        corrupted = full(self.shape, CORRUPTED_PIXEL)
+        self.channels = tuple(where(self.mask, ch, corrupted) for ch in channels)
 
-    return ssum / scnt if scnt else -1
+    def save(self, location: str):
+        save_arrays_as_image(self.channels, location=location, rgb=self.rgb)
 
-def operator_h(row: array, row_mask: array):
-    n = len(row)
-    x = [i for i, bit in enumerate(row_mask) if bit]
+    def inpainting(self, K=10, sqrt_n=16, B=9, epsilon=10**2, H=cubic_spline, omega=mean_of_squared_differences):     
+        # get the image dimensions
+        im_shape = self.shape
+        n = sqrt_n * sqrt_n
 
-    return interpolate.splev(range(n), interpolate.splrep(x, row.take(x)))
+        # get the dimensions of the subimage formed by corners of the patches
+        Np1, Np2 = im_shape[0] - sqrt_n + 1, im_shape[1] - sqrt_n + 1
+        Np = Np1 * Np2
 
-def image_process(image: array, image_mask: array, K=10, sqrt_n=16, B=9, e=10**2):
-    # get the image dimensions
-    N1, N2 = image.shape
+        # get the mask version of the patches vector
+        X_mask = array([
+                    [self.mask[i:(i+sqrt_n), j:(j+sqrt_n)].flatten('F') 
+                        for j in range(Np2)]
+                            for i in range(Np1)
+                ]).reshape(Np, n, order='F')
 
-    assert (N1, N2) == image_mask.shape, 'The 1st and 2nd image dimension must match with the dimension of image_mask'
+        # get the indices of subimages matrices
+        X_pos = array([ 
+                    [array([
+                        [(ii, jj) 
+                            for jj in range(j, j + sqrt_n)] 
+                                for ii in range(i, i + sqrt_n)
+                    ]).reshape(n, 2, order='F') 
+                        for j in range(Np2)]
+                            for i in range(Np1)
+                ]).reshape(Np, n, 2, order='F')
 
-    # get the dimensions of the subimage formed by corners of the patches
-    N1p, N2p = N1 - sqrt_n + 1, N2 - sqrt_n + 1
+        channels = []
+        # iter by all channels
+        for image in self.channels:
+            # get the patches in matrix form
+            Xm = array([
+                    [image[i:(i+sqrt_n), j:(j+sqrt_n)].flatten('F')
+                        for j in range(Np2)]
+                            for i in range(Np1)
+                ])
 
-    # saving for each parche from which pixel they come from
-    X_pos = [[(p, q) for q in range(j, j + sqrt_n) for p in range(i, i + sqrt_n)]
-                for j in range(N2p) for i in range(N1p)]
+            # get the patches vector
+            X = Xm.reshape(Np, n, order='F')
+            
+            # obtain K diferents reconstructions of the given image
+            Ys = []
 
-    # get the column stacked version of the image patches, the patches are in column stacked verion too
-    X = [array([image[i][j] for  i, j in row]) for row in X_pos]
-    X_mask = [array([image_mask[i][j] for  i, j in row]) for row in X_pos]
-    
-    # obtain K diferents reconstructions of the given image
-    Ys = []
+            for _ in range(K):
+                # get the matrices Pk and Pk^(-1)
+                per, iper = patch_reordering(patches=Xm, B=B, epsilon=epsilon, omega=omega)
 
-    for _ in range(K):
-        # get the matrices Pk and Pk^(-1)
-        # per, iper = patch_reordering(patches=X, w=distance_measure, duration=10.0)
-        per, iper = patch_reordering(shapes=(N1p, N2p), patches=X, w=distance_measure, e=e, B=B)
+                # permute X by Pk
+                Xp = X[per]
+                Xp_mask = X_mask[per]
 
-        # permute X by Pk
-        Xp = array(per(X))
-        Xp_mask = array(per(X_mask))
+                # apply the H operator to all subimages
+                HXp = array([H(signal, mask) for signal, mask in zip(Xp.transpose(), Xp_mask.transpose())]).transpose()
 
-        # apply the H operator to all subimages
-        HXp = array([operator_h(xrow, mrow) for xrow, mrow in zip(Xp.T, Xp_mask.T)]).T
+                # reorder the patches by Pk^(-1)
+                ys = HXp[iper]
 
-        # reorder the patches by Pk^(-1)
-        _X = array(iper(HXp))
+                # aux matrix to store both, sums of pixels and its amount in each pos
+                Yk_sum = full(im_shape, .0)
+                Yk_cnt = full(im_shape, .0)
 
-        Yk = [[[] for __ in range(N2)] for _ in range(N1)]
+                # average the pixels of each sumimage into complete image pixels
+                for y, xpos in zip(ys, X_pos):
+                    for pixel, pos in zip(y, xpos):
+                        Yk_sum[pos[0]][pos[1]] += pixel
+                        Yk_cnt[pos[0]][pos[1]] += 1
 
-        # average the pixels of each sumimage into complete image pixels
-        for patch, row in zip(_X, X_pos):
-            for pixel, (i, j) in zip(patch, row):
-                Yk[i][j].append(pixel)
+                Ys.append(Yk_sum/Yk_cnt)
 
-        Ys.append(array([array([sum(elem) / len(elem) for elem in row]) for row in Yk]))
+            # average this K result images to obtain the final image
+            channels.append((1 / K) * sum(Ys))
 
-    # average this K result images to obtain the final image
-    Y = (1 / K) * sum(Ys)
-
-    return Y
-
-def image_inpainting(R: array, G: array, B: array, image_mask: array):
-    '''
-    Return a new image recovering
-    the missing pixels on <image>
-    '''
-
-    img = [R, G, B]
-
-    Z = [array([array([pixel if bit else -1 for pixel, bit in zip(irow, mrow)]) 
-                    for irow, mrow in zip(ch, image_mask)]) for ch in img]
-
-
-    Y = [image_process(ch, image_mask, sqrt_n=3, B=3, e=10.0**2) for ch in Z]
-    yield Y
-
-    Y = [image_process(ch, image_mask, sqrt_n=3, B=3, e=10.0**8) for ch in Y]
-    yield Y
-
-    Y = [image_process(ch, image_mask, sqrt_n=3, B=3, e=10.0**8) for ch in Y]
-    yield Y
+        self.channels = tuple(channels)
