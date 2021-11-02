@@ -3,7 +3,7 @@ from numpy import full, exp
 
 INFINITE = 255**2 + 1
 
-def patch_reordering(patches, B: int, epsilon: float, omega):
+def patch_reordering(shape: tuple, patches, B: int, epsilon: float, omega):
     '''
     Return two reordering arrays based on the
     parameter omega(distance function), the
@@ -12,69 +12,67 @@ def patch_reordering(patches, B: int, epsilon: float, omega):
     '''
 
     # setup auxiliar data
-    Np1, Np2, _ = patches.shape
+    Np1, Np2 = shape
     Np = Np1 * Np2
     half1 = half2 = (B >> 1)
 
-    visited, unvisited, ordering = full((Np1, Np2), False), set(range(Np)), []
+    visited, unvisited, ordering = full(Np, False), set(range(Np)), []
 
     # choise a random start patch
-    last = (rd.choice(Np1), rd.choice(Np2)) 
+    last = rd.choice(Np) 
 
     # mark as visited and add to the ordering
     visited[last] = True
-    pos = last[1] * Np1 + last[0]
-    unvisited.remove(pos)
-    ordering.append(pos)
+    unvisited.remove(last)
+    ordering.append(last)
 
     # iter for each patch
     for _ in range(1, Np):
         # calculate the BxB neighborhood box
-        i1, i2 = max(0, last[0] - half1), min(Np1, last[0] + half2)
-        j1, j2 = max(0, last[1] - half1), min(Np2, last[1] + half2)
+        i, j = last % Np1, last // Np1
+        il, ir = max(0, i - half1), min(Np1, i + half2)
+        jl, jr = max(0, j - half1), min(Np2, j + half2)
 
         # setup values of the 2 minimun distances
         min1_d = min2_d = INFINITE
-        pos1 = pos2 = None
+        pos1 = pos2 = -1
 
         # array for no matching patches in the neighborhood
         diff = []
 
         # iter for each patch in the neighborhood
-        for i in range(i1, i2):
-            for j in range(j1, j2):
-                if not visited[i][j]: # if not visited calculate distance to this patch
-                    d = omega(patches[last], patches[i][j])
+        for ii in range(il, ir):
+            for pos in range(ii + jl * Np1, ii + jr * Np1, Np1):
+                if not visited[pos]: # if not visited calculate distance to this patch
+                    d = omega(patches[last], patches[pos])
                     if d < 0: # if no match, ignore it
-                        diff.append((i, j))
+                        diff.append(pos)
                     elif d < min1_d: # if less than minimun, update values
                         pos2, min2_d = pos1, min1_d
-                        pos1, min1_d = (i, j), d
+                        pos1, min1_d = pos, d
                     elif d < min2_d: # if less than 2nd minimun, update values
-                        pos2, min2_d = (i, j), d
+                        pos2, min2_d = pos, d
 
-        if pos1 is None: # no matching patch found
+        if pos1 == -1: # no matching patch found
             if diff: # select 1 from no-matching patches
                 last = diff[(len(diff) >> 1)]
             else: # select 1 from outside of neighborhood
-                pos = unvisited.pop()
-                ordering.append(pos)
-                last = pos % Np1, pos // Np1
+                last = unvisited.pop()
                 visited[last] = True
+                ordering.append(last)
                 continue
-        elif pos2 is None: # only 1 matching patch, select it
+        elif pos2 == -1: # only 1 matching patch, select it
             last = pos1
         else: # select randomly one of the 2 minimun distance patches
             p1, p2 = exp(-min1_d / epsilon), exp(-min2_d / epsilon)
             psum = p1 + p2
             p1, p2 = p1 / psum, p2 / psum
-            last = pos1 if rd.choice([True, False], p=[p1, p2]) else pos2
+            last = rd.choice([pos1, pos2], p=[p1, p2])
 
         # mark as visited last patch and add to the ordering
         visited[last] = True
-        pos = last[1] * Np1 + last[0]
-        unvisited.remove(pos)
-        ordering.append(pos)
+        unvisited.remove(last)
+        ordering.append(last)
 
     # generating the inverse ordering
     iordering = [-1] * Np

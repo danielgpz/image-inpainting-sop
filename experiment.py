@@ -17,15 +17,31 @@ if __name__ == '__main__':
     results = {}
     folder = config["folder"]
     rgb = config["rgb"]
-    corrupt_prob = config["corrupt_prob"]
     iterations = config["iterations"]
-    for image_dir in config["images"]:
+    images = config["images"]
+    corrupt_prob = 0
+    
+    if "masks" in config:
+        masks = config["masks"]
+        if isinstance(masks, str):
+            masks = [(True ^ cv2.imread(folder + masks, cv2.IMREAD_GRAYSCALE).astype(bool))] * len(images)
+        elif isinstance(masks, list):
+            assert len(images) == len(masks), 'Bad json, different number of images and masks'
+            masks = [(True ^ cv2.imread(folder + mask, cv2.IMREAD_GRAYSCALE).astype(bool)) for mask in masks]
+        else:
+            assert False, 'Bad json, masks field must be str or list'
+
+    else:   
+        corrupt_prob = config["corrupt_prob"]
+        masks = [None] * len(images)
+    
+    for image_dir, mask in zip(images, masks):
         try:
             image_dic = {}
             
             print(f'\nReading image "{image_dir}" ...')
             image, fmt = image_dir.rsplit('.', 1)
-            cim = CorruptedImage(folder + image_dir, rgb=rgb, corrupt_prob=corrupt_prob)
+            cim = CorruptedImage(folder + image_dir, mask=mask, rgb=rgb, corrupt_prob=corrupt_prob)
             im = cv2.imread(folder + image_dir, flags=(cv2.IMREAD_COLOR if rgb else cv2.IMREAD_GRAYSCALE))
 
             print(f'Corrupting image "{image_dir}" ...')
