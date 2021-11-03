@@ -74,7 +74,7 @@ if __name__ == '__main__':
             
             results[image_dir] = image_dic
 
-            with open(folder + 'results.json', 'w') as js:
+            with open(folder + 'results_' + json_dir, 'w') as js:
                 json.dump(results, js, indent=4)
         except Exception as ex:
             print(f'Error with "{image}": {ex}')

@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# temporal
+*.tif
+*.jpg
+*.png
+*.json
