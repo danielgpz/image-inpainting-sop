@@ -73,11 +73,11 @@ if __name__ == '__main__':
             image_dic["duration"] = duration
             
             results[image_dir] = image_dic
+
+            with open(folder + 'results.json', 'w') as js:
+                json.dump(results, js, indent=4)
         except Exception as ex:
             print(f'Error with "{image}": {ex}')
             traceback.print_tb(ex.__traceback__)
-
-    with open(folder + 'results.json', 'w') as js:
-        json.dump(results, js, indent=4)
 
         
