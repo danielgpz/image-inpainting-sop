@@ -15,6 +15,9 @@ def read_image_as_arrays(location: str, rgb=False, dtype=int):
 
     return (img.astype(dtype=dtype), )
 
+def read_image_as_mask(location, true_value=0):
+    return (imread(location, IMREAD_GRAYSCALE) == true_value)
+
 def save_arrays_as_image(arrays: tuple, location: str, rgb=False):
     '''
     Save a tuple of numpy arrays as an image at 

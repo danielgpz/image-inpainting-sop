@@ -1,4 +1,4 @@
-from ImageInpainting import CorruptedImage
+from ImageInpainting import CorruptedImage, read_image_as_mask
 from time import perf_counter
 from datetime import timedelta
 
@@ -22,15 +22,15 @@ if __name__ == '__main__':
     corrupt_prob = 0
     
     if "masks" in config:
-        masks = config["masks"]
-        if isinstance(masks, str):
-            masks = [(True ^ cv2.imread(folder + masks, cv2.IMREAD_GRAYSCALE).astype(bool))] * len(images)
-        elif isinstance(masks, list):
-            assert len(images) == len(masks), 'Bad json, different number of images and masks'
-            masks = [(True ^ cv2.imread(folder + mask, cv2.IMREAD_GRAYSCALE).astype(bool)) for mask in masks]
+        masks_dirs = config["masks"]
+        if isinstance(masks_dirs, str):
+            mask = read_image_as_mask(folder + masks_dirs)
+            masks = [mask] * len(images)
+        elif isinstance(masks_dirs, list):
+            assert len(images) == len(masks_dirs), 'Bad json, different number of images and masks'
+            masks = [read_image_as_mask(folder + mask_dir) for mask_dir in masks_dirs]
         else:
             assert False, 'Bad json, masks field must be str or list'
-
     else:   
         corrupt_prob = config["corrupt_prob"]
         masks = [None] * len(images)
