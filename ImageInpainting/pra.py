@@ -1,6 +1,7 @@
 from numpy import random as rd
 from numpy import full, exp
 
+
 INFINITE = 255**2 + 1
 
 def patch_reordering(shape: tuple, patches, B: int, epsilon: float, omega):

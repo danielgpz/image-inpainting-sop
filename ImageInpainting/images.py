@@ -11,7 +11,7 @@ def read_image_as_arrays(location: str, rgb=False, dtype=int):
     img = imread(location, IMREAD_COLOR if rgb else IMREAD_GRAYSCALE)
 
     if rgb:
-        return (ch.resahpe(img.shape[:2], dtype=dtype) for ch in dsplit(img, 3))
+        return tuple(ch.reshape(img.shape[:2]).astype(dtype=dtype) for ch in dsplit(img, 3))
 
     return (img.astype(dtype=dtype), )
 
