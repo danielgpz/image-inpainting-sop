@@ -55,7 +55,7 @@ class CorruptedImage:
         self.rgb = rgb
 
         self.mask = mask
-        if not mask:
+        if mask is None or isinstance(mask, bool):
             self.mask = rd.choice(a=[False, True], size=self.shape, p=[corrupt_prob, 1 - corrupt_prob])
 
         if self.mask.dtype != bool:
