@@ -4,12 +4,13 @@ from .operators import mean_of_squared_differences, cubic_spline, CORRUPTED_PIXE
 from .pra import patch_reordering
 from numpy import array, full, where
 from numpy import random as rd
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 
+CPU_CNT = max(1, cpu_count() - 1)
 
 def subimage_average_inpainting(
         im_shape: tuple, sim_shape: tuple, 
-        X, X_mask, X_pos, B=9, epsilon=10**4, 
+        X, X_empty, X_mask, X_pos, B=9, epsilon=10**4, 
         H=cubic_spline, omega=mean_of_squared_differences
     ):
     '''
@@ -18,7 +19,7 @@ def subimage_average_inpainting(
     only for multiprocessing reasons. 
     '''
     # get the matrices Pk and Pk^(-1)
-    per, iper = patch_reordering(sim_shape, patches=X, B=B, epsilon=epsilon, omega=omega)
+    per, iper = patch_reordering(sim_shape, patches=X, empty_patches=X_empty, B=B, epsilon=epsilon, omega=omega)
 
     # permute X by Pk
     Xp = X[per]
@@ -53,11 +54,9 @@ class CorruptedImage:
         self.shape = channels[0].shape
         self.rgb = rgb
 
-        self.mask = rd.choice(
-                        a=[False, True], 
-                        size=self.shape, 
-                        p=[corrupt_prob, 1 - corrupt_prob]
-                    ) if mask is None else mask
+        self.mask = mask
+        if not mask:
+            self.mask = rd.choice(a=[False, True], size=self.shape, p=[corrupt_prob, 1 - corrupt_prob])
 
         if self.mask.dtype != bool:
             raise ValueError(f'Mask must be an boolean ndarray')
@@ -71,7 +70,8 @@ class CorruptedImage:
     def save(self, location: str):
         save_arrays_as_image(self.channels, location=location, rgb=self.rgb)
 
-    def inpainting(self, K=10, sqrt_n=16, B=9, epsilon=10**4, H=cubic_spline, omega=mean_of_squared_differences):     
+    def inpainting(self, K=10, sqrt_n=16, B=9, epsilon=10**4, H=cubic_spline, 
+    	           omega=mean_of_squared_differences, processes=CPU_CNT):     
         # get the image and patches dimensions
         N1, N2 = self.shape
         n = sqrt_n * sqrt_n
@@ -108,15 +108,13 @@ class CorruptedImage:
                             for i in range(Np1)
                 ]).reshape(Np, n, order='F')
 
+            X_empty = (X == CORRUPTED_PIXEL).all(axis=-1)
+
             # obtain K diferents reconstructions of the given image
-            Ys, args = [], ((N1, N2), (Np1, Np2), X, X_mask, X_pos, B, epsilon, H, omega)
+            args = [(N1, N2), (Np1, Np2), X, X_empty, X_mask, X_pos, B, epsilon, H, omega]
             # using a multiprocessing pool
-            with Pool(processes=3) as pool:
-                for it in range(0, K, 3):
-                    # run a subimage average inpainting each time
-                    procs = [pool.apply_async(subimage_average_inpainting, args) for p in range(3) if it + p < K]
-                    for proc in procs:
-                        Ys.append(proc.get())
+            with Pool(processes=processes) as pool:
+                Ys = list(pool.starmap(subimage_average_inpainting, [args] * K))
 
             # average this K result images to obtain the final image
             channels.append((1 / K) * sum(Ys))
