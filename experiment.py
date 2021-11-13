@@ -2,7 +2,7 @@ from ImageInpainting import CorruptedImage, read_image_as_mask
 from time import perf_counter
 from datetime import timedelta
 
-import sys, json, cv2, traceback
+import os, sys, json, cv2, traceback
 
 if __name__ == '__main__':
 
@@ -17,6 +17,7 @@ if __name__ == '__main__':
     results = {}
     folder = config["folder"]
     rgb = config["rgb"]
+    cv2flag = cv2.IMREAD_COLOR if rgb else cv2.IMREAD_GRAYSCALE
     iterations = config["iterations"]
     images = config["images"]
     corrupt_prob = 0
@@ -42,27 +43,30 @@ if __name__ == '__main__':
             print(f'\nReading image "{image_dir}" ...')
             image, fmt = image_dir.rsplit('.', 1)
             cim = CorruptedImage(folder + image_dir, mask=mask, rgb=rgb, corrupt_prob=corrupt_prob)
-            im = cv2.imread(folder + image_dir, flags=(cv2.IMREAD_COLOR if rgb else cv2.IMREAD_GRAYSCALE))
+            im = cv2.imread(folder + image_dir, flags=cv2flag)
 
             print(f'Corrupting image "{image_dir}" ...')
-            corrupted_dir = f'{image}_corrupted.{fmt}'
-            cim.save(folder + corrupted_dir)
-            corruped_pnsr = cv2.PSNR(im, cv2.imread(folder + corrupted_dir, flags=(cv2.IMREAD_COLOR if rgb else cv2.IMREAD_GRAYSCALE)))
+            corrupted_dir = folder + f'{image}_corrupted.{fmt}'
+            cim.save(corrupted_dir)
+            corruped_pnsr = cv2.PSNR(im, cv2.imread(corrupted_dir, flags=cv2flag))
 
             print(f'Processing image "{image_dir}" ...')  
             iterations_dic = {}
             start = perf_counter()
             for iteration, kwargs in iterations.items():
                 print(f'Iteration: {iteration} ---> Params: {kwargs}')
-                
+                iteration_dir = folder + f'{image}_iteration_{iteration}.{fmt}'
+
                 last = perf_counter()
-                cim.inpainting(**kwargs)
+                if os.path.isfile(iteration_dir):
+                    cim = CorruptedImage(iteration_dir, mask=mask, rgb=rgb, corrupt_prob=corrupt_prob,
+                                            corrupt_pixels=False)
+                else:
+                    cim.inpainting(**kwargs)
+                    cim.save(iteration_dir)
                 duration = str(timedelta(seconds=int(perf_counter() - last)))
                 
-                iteration_dir = f'{image}_iteration_{iteration}.{fmt}'
-                cim.save(folder + iteration_dir)
-                psnr = cv2.PSNR(im, cv2.imread(folder + iteration_dir, flags=(cv2.IMREAD_COLOR if rgb else cv2.IMREAD_GRAYSCALE)))
-                
+                psnr = cv2.PSNR(im, cv2.imread(iteration_dir, flags=cv2flag))
                 print(f'Iteration: {iteration} ---> PSNR: {psnr} Duration: {duration}')
                 iterations_dic[iteration] = { "psnr": psnr, "duration": duration }
             duration = str(timedelta(seconds=int(perf_counter() - start)))

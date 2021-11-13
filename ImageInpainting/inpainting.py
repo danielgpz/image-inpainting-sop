@@ -49,9 +49,9 @@ class CorruptedImage:
     defined by a mask. Provides a function to
     do a patches-based inpainting
     '''
-    def __init__(self, location: str, mask=None, rgb=False, corrupt_prob=4/5):
-        channels = read_image_as_arrays(location, rgb=rgb)
-        self.shape = channels[0].shape
+    def __init__(self, location: str, mask=None, rgb=False, corrupt_prob=4/5, corrupt_pixels=True):
+        self.channels = read_image_as_arrays(location, rgb=rgb)
+        self.shape = self.channels[0].shape
         self.rgb = rgb
 
         self.mask = mask
@@ -64,8 +64,9 @@ class CorruptedImage:
         if self.shape != self.mask.shape:
             raise ValueError(f'Images at <{location}> and mask must have same resolution')
 
-        corrupted = full(self.shape, CORRUPTED_PIXEL)
-        self.channels = tuple(where(self.mask, ch, corrupted) for ch in channels)
+        if corrupt_pixels:
+            corrupted = full(self.shape, CORRUPTED_PIXEL)
+            self.channels = tuple(where(self.mask, ch, corrupted) for ch in self.channels)
 
     def save(self, location: str):
         save_arrays_as_image(self.channels, location=location, rgb=self.rgb)
