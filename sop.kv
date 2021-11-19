@@ -1,0 +1,265 @@
+<Controller>:
+    image_screen: image_screen
+    load_image_bt: load_image_bt
+    load_mask_bt: load_mask_bt
+    random_mask_bt: random_mask_bt
+    inpainting_image_bt: inpainting_image_bt
+
+    BoxLayout:
+        orientation: 'vertical'
+        spacing: 10
+        pos: self.parent.x + 5, self.parent.y + 5
+        size: self.parent.width - 10, self.parent.height - 10
+        
+        Image:
+            id: image_screen
+            size_hint: 1, .8
+
+        BoxLayout:
+            orientation: 'horizontal'
+            spacing: 10
+            size_hint: 1, .1
+
+            Button:
+                id: load_image_bt
+                text: "Cargar Imagen"
+                on_release: root.show_popup("Cargar Imagen", root.LoadDialog, size_hint=(0.9, 0.9), load=root.load_image, cancel=root.dismiss_popup)
+                size_hint: .33, 1
+
+            Button:
+                id: load_mask_bt
+                text: "Cargar Máscara"
+                on_release: root.show_popup("Cargar Máscara", root.LoadDialog, size_hint=(0.9, 0.9), load=root.load_mask, cancel=root.dismiss_popup)
+                size_hint: .33, 1
+                disabled: True
+
+            Button:
+                id: random_mask_bt
+                text: "Máscara Aleatoria"
+                on_release: root.show_popup("Máscara Aleatoria", root.RandomMaskDialog, size_hint=(0.9, 0.3), corrupt=root.corrupt_image, cancel=root.dismiss_popup)
+                size_hint: .33, 1
+                disabled: True
+
+        Button:
+            id: inpainting_image_bt
+            text: "Restaurar"
+            on_release: root.show_popup("Restaurar Imagen", root.InpaintingDialog, size_hint=(0.9, 0.9), inpainting=root.inpainting, cancel=root.dismiss_popup);
+            size_hint: 1, .1
+            disabled: True
+
+<LoadDialog>:
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+
+            ToggleButton:
+                text: "Íconos"
+                group: 'load_layout'
+                state: 'down'
+                on_release: filechooser.view_mode = 'icon'; self.state = 'down'
+            
+            ToggleButton:
+                text: "Detalles"
+                group: 'load_layout'
+                on_release: filechooser.view_mode = 'list'; self.state = 'down'
+
+        FileChooser:
+            id: filechooser
+            path: "./"
+            FileChooserIconLayout
+            FileChooserListLayout
+
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+            
+            Button:
+                text: "Cancelar"
+                on_release: root.cancel()
+            
+            Button:
+                text: "Cargar"
+                on_release: root.load(filechooser.path, filechooser.selection)
+
+<RandomMaskDialog>:
+    corrupt_prob: slider
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+        spacing: 10
+        
+        BoxLayout:
+            center_y: root.center_y
+            size_hint: 1, .4
+            
+            Slider:
+                id: slider
+                min: 0
+                max: 100
+                step: 1
+                value: 80
+                size_hint: .7, 1
+
+            Label:
+                text: str(int(slider.value)) + "% píxeles corruptos"
+                size_hint: .3, 1
+        
+        BoxLayout:
+            y: root.y
+            size_hint: 1, .4
+            
+            Button:
+                text: "Cancelar"
+                on_release: root.cancel() 
+            
+            Button:
+                text: "Aceptar"
+                on_release: root.corrupt(slider.value/slider.max)
+
+<SaveDialog>:
+    text_input: text_input
+    
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+
+            ToggleButton:
+                text: "Íconos"
+                group: 'load_layout'
+                state: 'down'
+                on_release: filechooser.view_mode = 'icon'; self.state = 'down'
+            
+            ToggleButton:
+                text: "Detalles"
+                group: 'load_layout'
+                on_release: filechooser.view_mode = 'list'; self.state = 'down'
+
+        FileChooser:
+            id: filechooser
+            path: "./"
+            on_selection: text_input.text = self.selection and self.selection[0] or ''
+            FileChooserIconLayout
+            FileChooserListLayout
+
+        TextInput:
+            id: text_input
+            size_hint_y: None
+            height: 30
+            multiline: False
+
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+           
+            Button:
+                text: "Cancelar"
+                on_release: root.cancel()
+
+            Button:
+                text: "Guardar"
+                on_release: root.save(filechooser.path, text_input.text)
+
+<InpaintingDialog>:
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+        spacing: 10
+        
+        BoxLayout:
+            size_hint: 1, .1667
+            
+            Slider:
+                id: slider_k
+                min: 1
+                max: 20
+                step: 1
+                value: 10
+                size_hint: .6, 1
+
+            Label:
+                text: "Cantidad de subrestauraciones (K): " + str(int(slider_k.value))
+                size_hint: .4, 1
+
+        BoxLayout:
+            size_hint: 1, .1667
+            
+            Slider:
+                id: slider_sqrt_n
+                min: 2
+                max: 16
+                step: 1
+                value: 4
+                size_hint: .6, 1
+
+            Label:
+                text: "Parches de " + str(int(slider_sqrt_n.value)) + " x " + str(int(slider_sqrt_n.value))
+                size_hint: .4, 1
+
+        BoxLayout:
+            size_hint: 1, .1667
+            
+            Slider:
+                id: slider_B
+                min: 2
+                max: 32
+                step: 1
+                value: 6
+                size_hint: .6, 1
+
+            Label:
+                text: "Radio de Vecindad (B): " + str(int(slider_B.value))
+                size_hint: .4, 1
+
+        BoxLayout:
+            size_hint: 1, .1667
+            
+            Slider:
+                id: slider_epsilon
+                min: 2
+                max: 8
+                step: 1
+                value: 4
+                size_hint: .6, 1
+
+            Label:
+                text: "Epsilon: 10^" + str(int(slider_epsilon.value))
+                size_hint: .4, 1
+
+        BoxLayout:
+            size_hint: 1, .1667
+            
+            Slider:
+                id: slider_processes
+                min: 1
+                max: 8
+                step: 1
+                value: 2
+                size_hint: .6, 1
+
+            Label:
+                text: "Cantidad de procesos en paralelo: " + str(int(slider_processes.value))
+                size_hint: .4, 1
+        
+        BoxLayout:
+            size_hint: 1, .1667
+            
+            Button:
+                id: cancel_inpainting
+                text: "Cancelar"
+                on_release: root.cancel() 
+            
+            Button:
+                text: "Restaurar"
+                on_release: root.inpainting(K=int(slider_k.value), sqrt_n=int(slider_sqrt_n.value), B=int(slider_B.value), epsilon=10**slider_epsilon.value, processes=int(slider_processes.value))
