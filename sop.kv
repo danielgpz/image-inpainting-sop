@@ -4,6 +4,15 @@
     load_mask_bt: load_mask_bt
     random_mask_bt: random_mask_bt
     inpainting_image_bt: inpainting_image_bt
+    save_image_bt: save_image_bt
+
+    canvas.before:
+        Color:
+            rgba: .5, .5, .5, .25
+        Rectangle:
+            # self here refers to the widget i.e FloatLayout
+            pos: self.pos
+            size: self.size
 
     BoxLayout:
         orientation: 'vertical'
@@ -38,14 +47,24 @@
                 text: "Máscara Aleatoria"
                 on_release: root.show_popup("Máscara Aleatoria", root.RandomMaskDialog, size_hint=(0.9, 0.3), corrupt=root.corrupt_image, cancel=root.dismiss_popup)
                 size_hint: .33, 1
+                disabled: load_mask_bt.disabled
+
+        BoxLayout:
+            orientation: 'horizontal'
+            spacing: 10
+            size_hint: 1, .1
+            
+            Button:
+                id: inpainting_image_bt
+                text: "Restaurar"
+                on_release: root.show_popup("Restaurar Imagen", root.InpaintingDialog, size_hint=(0.9, 0.9), inpainting=root.inpainting, cancel=root.dismiss_popup)
                 disabled: True
 
-        Button:
-            id: inpainting_image_bt
-            text: "Restaurar"
-            on_release: root.show_popup("Restaurar Imagen", root.InpaintingDialog, size_hint=(0.9, 0.9), inpainting=root.inpainting, cancel=root.dismiss_popup);
-            size_hint: 1, .1
-            disabled: True
+            Button:
+                id: save_image_bt
+                text: "Guardar Restauración"
+                on_release: root.show_popup("Guardar Imagen", root.SaveDialog, size_hint=(0.9, 0.9), save=root.save_image, cancel=root.dismiss_popup)
+                disabled: inpainting_image_bt.disabled
 
 <LoadDialog>:
     BoxLayout:
@@ -54,8 +73,7 @@
         orientation: "vertical"
 
         BoxLayout:
-            size_hint_y: None
-            height: 30
+            size_hint: 1, .1
 
             ToggleButton:
                 text: "Íconos"
@@ -68,15 +86,40 @@
                 group: 'load_layout'
                 on_release: filechooser.view_mode = 'list'; self.state = 'down'
 
-        FileChooser:
-            id: filechooser
-            path: "./"
-            FileChooserIconLayout
-            FileChooserListLayout
+        BoxLayout:
+            size_hint: 1, .8 
+            spacing: 10          
+            
+            FileChooser:
+                id: filechooser
+                path: "./"
+                size_hint: .68, 1
+                FileChooserIconLayout
+                FileChooserListLayout
+
+            BoxLayout:
+                orientation: 'vertical'
+                size_hint: .32, 1
+                
+                Image:
+                    size_hint: 1, .8
+                    color: (0, 0, 0, 0) if not filechooser.selection else (1, 1, 1, 1)
+                    source: filechooser.selection[0] if filechooser.selection else ''
+
+                BoxLayout:
+                    size_hint: 1, .2
+
+                    Switch:
+                        size_hint: .4, 1
+                        id: rgb_switch
+                        active: False
+                    
+                    Label:
+                        size_hint: .6, 1
+                        text: "Cargar en RGB"
 
         BoxLayout:
-            size_hint_y: None
-            height: 30
+            size_hint: 1, .1
             
             Button:
                 text: "Cancelar"
@@ -84,7 +127,8 @@
             
             Button:
                 text: "Cargar"
-                on_release: root.load(filechooser.path, filechooser.selection)
+                on_release: root.load(filechooser.path, filechooser.selection, rgb_switch.active)
+                disabled: len(filechooser.selection) == 0
 
 <RandomMaskDialog>:
     corrupt_prob: slider
@@ -121,54 +165,6 @@
             Button:
                 text: "Aceptar"
                 on_release: root.corrupt(slider.value/slider.max)
-
-<SaveDialog>:
-    text_input: text_input
-    
-    BoxLayout:
-        size: root.size
-        pos: root.pos
-        orientation: "vertical"
-
-        BoxLayout:
-            size_hint_y: None
-            height: 30
-
-            ToggleButton:
-                text: "Íconos"
-                group: 'load_layout'
-                state: 'down'
-                on_release: filechooser.view_mode = 'icon'; self.state = 'down'
-            
-            ToggleButton:
-                text: "Detalles"
-                group: 'load_layout'
-                on_release: filechooser.view_mode = 'list'; self.state = 'down'
-
-        FileChooser:
-            id: filechooser
-            path: "./"
-            on_selection: text_input.text = self.selection and self.selection[0] or ''
-            FileChooserIconLayout
-            FileChooserListLayout
-
-        TextInput:
-            id: text_input
-            size_hint_y: None
-            height: 30
-            multiline: False
-
-        BoxLayout:
-            size_hint_y: None
-            height: 30
-           
-            Button:
-                text: "Cancelar"
-                on_release: root.cancel()
-
-            Button:
-                text: "Guardar"
-                on_release: root.save(filechooser.path, text_input.text)
 
 <InpaintingDialog>:
     BoxLayout:
@@ -263,3 +259,49 @@
             Button:
                 text: "Restaurar"
                 on_release: root.inpainting(K=int(slider_k.value), sqrt_n=int(slider_sqrt_n.value), B=int(slider_B.value), epsilon=10**slider_epsilon.value, processes=int(slider_processes.value))
+
+<SaveDialog>:
+    text_input: text_input
+    
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+
+        BoxLayout:
+            size_hint: 1, .1
+
+            ToggleButton:
+                text: "Íconos"
+                group: 'load_layout'
+                state: 'down'
+                on_release: filechooser.view_mode = 'icon'; self.state = 'down'
+            
+            ToggleButton:
+                text: "Detalles"
+                group: 'load_layout'
+                on_release: filechooser.view_mode = 'list'; self.state = 'down'
+
+        FileChooser:
+            id: filechooser
+            path: "./"
+            on_selection: text_input.text = self.selection and self.selection[0] or ''
+            size_hint: 1, .7
+            FileChooserIconLayout
+            FileChooserListLayout
+
+        TextInput:
+            id: text_input
+            size_hint: 1, .1
+            multiline: False
+
+        BoxLayout:
+            size_hint: 1, .1
+           
+            Button:
+                text: "Cancelar"
+                on_release: root.cancel()
+
+            Button:
+                text: "Guardar"
+                on_release: root.save(filechooser.path, text_input.text)

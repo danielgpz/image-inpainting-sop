@@ -32,6 +32,7 @@ class Controller(Widget):
     load_mask_bt = ObjectProperty(None)
     random_mask_bt = ObjectProperty(None)
     inpainting_image_bt = ObjectProperty(None)
+    save_image_bt = ObjectProperty(None)
     # Load & save properties
     loadfile = ObjectProperty(None)
     savefile = ObjectProperty(None)
@@ -42,10 +43,11 @@ class Controller(Widget):
         super(Controller, self).__init__(**kwargs)
         self.LoadDialog = LoadDialog
         self.RandomMaskDialog = RandomMaskDialog
-        self.SaveDialog = SaveDialog
         self.InpaintingDialog = InpaintingDialog
+        self.SaveDialog = SaveDialog
         
         self.image_dir = ''
+        self.image_rgb = False
         self.temp_dir = ''
         self.corrupted_image = None
 
@@ -57,22 +59,23 @@ class Controller(Widget):
         self._popup = Popup(title=title, content=content, size_hint=size_hint)
         self._popup.open()
 
-    def load_image(self, path, filename):
+    def load_image(self, path, filename, rgb=False):
         file = os.path.join(path, filename[0])
         self.image_screen.source = file
         self.image_dir = file
+        self.image_rgb = rgb
         self.corrupted_image = None
         
         self.load_mask_bt.disabled = False
-        self.random_mask_bt.disabled = False
         self.inpainting_image_bt.disabled = True
         self.dismiss_popup()
 
-    def load_mask(self, path, filename):
+    def load_mask(self, path, filename, rgb=False):
         file = os.path.join(path, filename[0])
         mask = read_image_as_mask(file)
+        # self.image_rgb = rgb
         
-        self.corrupted_image = CorruptedImage(self.image_dir, mask=mask)
+        self.corrupted_image = CorruptedImage(self.image_dir, mask=mask, rgb=self.image_rgb)
 
         if not self.temp_dir:
             fmt = self.image_dir.rsplit('.', 1)[1]
@@ -86,7 +89,7 @@ class Controller(Widget):
         self.dismiss_popup()
 
     def corrupt_image(self, corrupt_prob):
-        self.corrupted_image = CorruptedImage(self.image_dir, corrupt_prob=corrupt_prob)
+        self.corrupted_image = CorruptedImage(self.image_dir, corrupt_prob=corrupt_prob, rgb=self.image_rgb)
 
         if not self.temp_dir:
             fmt = self.image_dir.rsplit('.', 1)[1]
@@ -109,16 +112,21 @@ class Controller(Widget):
         self.dismiss_popup()
 
     def save_image(self, path, filename):
-        file = os.path.join(path, filename[0])
-        print(f'Saving file {file}')
+        file = os.path.join(path, filename)
+        fmt = self.image_dir.rsplit('.', 1)[1]
+        self.corrupted_image.save(file if file.endswith(f'.{fmt}') else f'{file}.{fmt}')
 
         self.dismiss_popup()
 
 
 class SopApp(App):
     def build(self):
-        return = Controller()
+        return Controller()
 
 
 if __name__ == '__main__':
     SopApp().run()
+
+    # delete all aux files
+    for file in os.listdir('./temp/'):
+        os.remove('./temp/' + file)
